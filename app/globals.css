@@ -1,0 +1,1225 @@
+:root {
+  --ink: #0e1520;
+  --ink-lift: #1a2638;
+  --paper: #ece6d6;
+  --dim: #8d97a8;
+  --gold: #c8a86b;
+  --reader-size: 16pt; /* resting reading size; the toolbar slider changes this */
+  --grow-pt: 0.1pt;    /* fixed size increase for the hovered verse; not user adjustable */
+  --reader-font: "Roboto Variable", "Roboto", system-ui, sans-serif; /* the toolbar font picker changes this */
+  --align: justify;    /* text alignment */
+  --red: #f26b6b;      /* Christ's words: a lighter red, 6.2:1 on the page */
+  --edge-margin: 28px; /* fixed estimate: room reserved so hover growth never crosses the width handle */
+  --hover-ms: 85ms;    /* hover grow/shrink transition duration; fixed, not user adjustable */
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--ink); color-scheme: dark; overflow-x: clip; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Roboto Variable", "Roboto", system-ui, sans-serif;
+  color: var(--paper);
+  background:
+    radial-gradient(70% 45% at 50% 0%, var(--ink-lift), transparent 70%),
+    var(--ink);
+  background-repeat: no-repeat;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+::selection { background: color-mix(in srgb, var(--gold) 35%, transparent); }
+
+a { color: inherit; text-decoration: none; }
+a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 2px; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* ---------- top bar ---------- */
+.bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 0.6rem;
+  gap: 1rem;
+  padding: 1.25rem clamp(1rem, 4vw, 2.5rem);
+  font-size: 0.95rem;
+  color: var(--dim);
+}
+.brand { flex: none; display: flex; flex-direction: column; white-space: nowrap; font-weight: 400; letter-spacing: 0.02em; line-height: 1.2; }
+.brand-version { margin-top: 0.1rem; font-size: 0.68rem; font-weight: 400; letter-spacing: 0.06em; color: var(--dim); opacity: 0.7; font-variant-numeric: tabular-nums; }
+.brand:hover { color: var(--paper); }
+/* ---------- go to navigator: Book → Chapter → Verse ---------- */
+.nav { position: relative; flex: none; }
+.nav-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  width: 11rem;
+  padding: 0.4rem 0.2rem;
+  font: inherit;
+  color: var(--paper);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--dim) 40%, transparent);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.nav-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-trigger svg { width: 0.95rem; height: 0.95rem; flex: none; color: var(--dim); transition: transform 0.2s ease; }
+.nav-trigger:hover, .nav-trigger[aria-expanded="true"] { border-bottom-color: var(--gold); }
+.nav-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+.nav-panel {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  z-index: 50;
+  width: min(27rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  max-height: min(34rem, 72vh);
+  background: var(--ink-lift);
+  border: 1px solid color-mix(in srgb, var(--dim) 25%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden; /* clips content while the height animates between steps */
+  animation: nav-in 140ms ease-out both;
+}
+@keyframes nav-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.nav-crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.7rem 0.9rem 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--dim) 18%, transparent);
+  font-size: 0.85rem;
+  color: var(--dim);
+}
+.nav-crumbs button {
+  padding: 0.15rem 0.35rem;
+  font: inherit;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.nav-crumbs button:hover { color: var(--paper); }
+.nav-crumbs button.on { color: var(--gold); }
+
+.nav-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0.4rem 0.9rem 0.9rem; }
+.nav-body h3 {
+  margin: 0.7rem 0 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.nav-books { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.15rem; }
+.nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: 0.25rem; }
+.nav-books button, .nav-grid button {
+  padding: 0.42rem 0.45rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--paper);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.nav-grid button { text-align: center; font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--paper) 4%, transparent); }
+.nav-books button:hover, .nav-grid button:hover, .nav-books button:focus-visible, .nav-grid button:focus-visible {
+  background: color-mix(in srgb, var(--paper) 10%, transparent);
+}
+.nav-books button.current, .nav-grid button.current { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.nav-open {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--gold);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+.nav-open:hover, .nav-open:focus-visible { filter: brightness(1.1); }
+@media (max-width: 640px) { .nav-trigger { width: 7rem; } .nav-books { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- reader ---------- */
+.reader {
+  /* default column width 990px, shrinking to fit narrower windows */
+  width: min(990px, calc(100vw - 3.5rem));
+  margin: 0 auto;
+  padding: clamp(1.5rem, 6vh, 4rem) 0 6rem;
+  font-family: var(--reader-font);
+  font-size: var(--reader-size);
+  font-weight: 300;
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.chapter { margin: 0 0 3rem; font-size: max(30pt, calc(var(--reader-size) * 1.25)); line-height: 1; font-weight: 100; }
+.chapter .book { display: block; font-size: 0.55em; letter-spacing: 0.06em; color: var(--dim); font-weight: 300; }
+.chapter .num { display: block; font-size: 2.6em; margin-top: 0.05em; color: var(--paper); }
+
+.para { position: relative; z-index: 1; margin: 0 0 1.1em; } /* above the highlight layer */
+.line { margin: 0; cursor: pointer; text-align: var(--align); }
+.poem .line { line-height: 1.5; }
+.poem { margin-bottom: 1.3em; }
+
+/* The reveal: each word waits its turn (--i × --step), then fades from near-
+   transparent to solid. Pure CSS, so clicking or scrolling never interrupts it. */
+.w {
+  font-size: 1em;
+  opacity: 1;
+  animation: reveal 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i) * var(--step));
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  transition:
+    font-size var(--hover-ms, 85ms) ease-in-out,
+    font-weight var(--hover-ms, 85ms) ease-in-out,
+    color var(--hover-ms, 85ms) ease-in-out,
+    text-decoration-color var(--hover-ms, 85ms) ease-in-out;
+}
+/* Hovered verse: a touch larger, one weight step up from the default (Light → Regular),
+   a dotted underline fading in, and a touch brighter — eased over 50ms each way. */
+.w[data-hot] {
+  font-size: calc(1em + var(--grow-pt));
+  font-weight: 400;
+  color: #fffaf0;
+  text-decoration-color: var(--gold);
+}
+/* Christ's words, when red letter text is on (toggled on <html>) */
+.redletter .w.wj { color: var(--red); }
+.redletter .w.wj[data-hot] { color: #ff9490; }
+
+/* While VerseFocus measures line breaks it needs every word at resting size, instantly. */
+.measuring .w { transition: none !important; font-size: 1em !important; font-weight: inherit !important; }
+
+@keyframes reveal {
+  from { opacity: 0.04; }
+  to   { opacity: 1; }
+}
+
+.v {
+  margin-right: 0.28em;
+  font-size: 0.42em;
+  font-weight: 400;
+  vertical-align: 0.95em;
+  line-height: 0;
+  color: var(--gold);
+}
+
+/* ---------- footer ---------- */
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 3em;
+  font-size: 0.9rem;
+  color: var(--dim);
+}
+.pager a:hover { color: var(--paper); }
+.credit { margin: 2rem 0 0; font-size: 0.75rem; color: var(--dim); opacity: 0.7; }
+
+/* ---------- not found ---------- */
+.notfound { max-width: 32rem; margin: 20vh auto 0; padding: 0 1.5rem; text-align: center; }
+.notfound h1 { font-weight: 300; font-size: 2rem; margin: 0 0 1rem; }
+.notfound p { color: var(--dim); line-height: 1.6; }
+.notfound a { color: var(--gold); }
+
+/* Keep the fade for everyone (opacity only, no movement), just gentler. */
+@media (prefers-reduced-motion: reduce) {
+  .w { animation-duration: 400ms; }
+}
+
+/* Once VerseFocus.js has measured the natural line breaks at resting size, each line is
+   frozen: no re-wrapping, ever, even if a hovered verse grows past the row's natural width.
+   Each row still spans the full column so justify (or left align) has room to work. */
+.line.frozen {
+  white-space: nowrap;
+}
+
+/* ---------- toolbar ---------- */
+.tools { display: flex; align-items: center; flex-wrap: wrap; row-gap: 0.6rem; gap: clamp(0.75rem, 2vw, 1.5rem); }
+
+/* reset-to-defaults button, leftmost in the toolbar, with a hover tooltip */
+.reset {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.reset:hover, .reset:focus-visible { color: var(--paper); background: color-mix(in srgb, var(--paper) 8%, transparent); }
+.reset svg { width: 1.15rem; height: 1.15rem; display: block; }
+.reset .tip {
+  position: absolute;
+  top: 130%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  background: var(--ink-lift);
+  color: var(--paper);
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.reset:hover .tip, .reset:focus-visible .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* text size stepper: (−) value (+) */
+.size { display: flex; align-items: center; gap: 0.35rem; }
+.size button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.size button:hover:not(:disabled), .size button:focus-visible { color: var(--paper); background: color-mix(in srgb, var(--paper) 8%, transparent); }
+.size button:disabled { opacity: 0.35; cursor: default; }
+.size svg { width: 1rem; height: 1rem; display: block; }
+.size .pt { min-width: 3.2rem; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* justified / left-aligned toggle, next to the text size stepper */
+/* ---------- red letter switch ---------- */
+/* White track while off, red while on; the knob slides across and both colours
+   change in 85ms. The knob carries a no entry sign (off) or a bold J (on). */
+.redswitch {
+  position: relative;
+  flex: none;
+  width: 2.75rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #f4f1ea;
+  cursor: pointer;
+  transition: background-color 85ms ease;
+}
+.redswitch .knob {
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  color: #f4f1ea;
+  background: var(--ink);
+  transition: transform 85ms ease, background-color 85ms ease, color 85ms ease;
+}
+.redswitch .knob svg { width: 0.8rem; height: 0.8rem; display: block; }
+.redswitch.on { background: var(--red); }
+.redswitch.on .knob { transform: translateX(1.25rem); color: var(--red); background: #ffffff; }
+.redswitch:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+
+/* ---------- column width handle ---------- */
+.text-col { position: relative; padding-right: var(--edge-margin); }
+
+/* Generous invisible hit area; the visible bar is a thin white line inside it,
+   pinned to the right edge of the text column. */
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -16px;
+  width: 30px;
+  display: flex;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+.handle::before {
+  content: "";
+  align-self: stretch;
+  width: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.5);
+  transition: background-color 0.15s ease, width 0.15s ease, box-shadow 0.15s ease;
+}
+.handle:hover::before,
+.handle:focus-visible::before,
+.resizing .handle::before {
+  width: 3px;
+  background: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+}
+
+/* While dragging, ColumnResize.js removes the frozen breaks entirely so text reflows
+   live; this just keeps the per-word transitions from fighting the constant resize. */
+.resizing .w { transition: none !important; }
+
+@media (max-width: 640px) { .handle { right: -12px; width: 22px; } }
+
+/* ---------- version and font pickers ---------- */
+.pick { position: relative; display: flex; align-items: center; }
+.pick select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.35rem 1.35rem 0.35rem 0.2rem;
+  font: inherit;
+  color: var(--dim);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--dim) 40%, transparent);
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.pick select:hover, .pick select:focus { color: var(--paper); border-bottom-color: var(--gold); }
+.pick select option { color: var(--paper); background: var(--ink-lift); }
+/* small chevron drawn in CSS so the native arrow can be hidden */
+.pick::after {
+  content: "";
+  position: absolute;
+  right: 0.3rem;
+  top: 50%;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--dim);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.version select { font-weight: 500; letter-spacing: 0.04em; }
+.font select { width: 8.6rem; }
+@media (max-width: 640px) { .font select { width: 7rem; } }
+
+/* ---------- search bar ---------- */
+.search {
+  flex: 1 1 14rem;
+  max-width: 26rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--dim) 40%, transparent);
+  transition: border-color 0.15s ease;
+}
+.search:focus-within { border-bottom-color: var(--gold); }
+.search svg { width: 1.05rem; height: 1.05rem; flex: none; }
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.1rem 0;
+  font: inherit;
+  color: var(--paper);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.search input::placeholder { color: var(--dim); }
+.search input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.6); cursor: pointer; }
+
+/* ---------- search results ---------- */
+.results-page {
+  width: min(990px, calc(100vw - 3.5rem));
+  margin: 0 auto;
+  padding: clamp(1.5rem, 6vh, 4rem) 0 6rem;
+}
+.results-title { margin: 0 0 0.6rem; font-weight: 300; line-height: 1.2; }
+.results-title .label { display: block; font-size: 0.95rem; letter-spacing: 0.06em; color: var(--dim); font-weight: 300; }
+.results-title .q { display: block; font-size: 2rem; font-weight: 200; color: var(--paper); overflow-wrap: anywhere; }
+.results-status { margin: 0 0 2.5rem; font-size: 0.85rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+.results-status .mode { display: block; margin-top: 0.25rem; opacity: 0.75; }
+
+.results { list-style: none; margin: 0; padding: 0; }
+.result { border-top: 1px solid color-mix(in srgb, var(--dim) 18%, transparent); animation: result-in 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.result a { display: block; padding: 1.1rem 0.25rem 1.15rem; transition: background-color 0.15s ease; border-radius: 4px; }
+.result a:hover, .result a:focus-visible { background: color-mix(in srgb, var(--paper) 5%, transparent); }
+.result .text {
+  display: block;
+  font-family: var(--reader-font);
+  font-size: var(--reader-size);
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--paper);
+}
+.result a:hover .text { color: #fffaf0; }
+.result .where { display: block; margin-top: 0.4rem; font-size: 0.8rem; letter-spacing: 0.03em; color: var(--gold); }
+.result .score { margin-left: 0.75rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+.results.cached .result { animation: none; } /* restored from cache: no entrance fade */
+@keyframes result-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .result { animation: none; } }
+
+/* a verse opened from search: land it a third of the way down and mark its number */
+.v { scroll-margin-top: 30vh; }
+
+/* Opened from a search result: no word by word reveal. Once SearchArrival has
+   scrolled to the verse it adds .focusing, which fades everything but that verse
+   to 30% opacity (70% transparent) in 85ms; a click removes it and the text
+   fades back over 450ms. (A transition always uses the destination's timing.) */
+.instant .w {
+  animation: none;
+  transition:
+    font-size var(--hover-ms, 85ms) ease-in-out,
+    font-weight var(--hover-ms, 85ms) ease-in-out,
+    color var(--hover-ms, 85ms) ease-in-out,
+    text-decoration-color var(--hover-ms, 85ms) ease-in-out,
+    opacity 450ms ease;
+}
+.instant .chapter, .instant .pager, .instant .credit { transition: opacity 450ms ease; }
+.focusing .w:not(.hit) {
+  opacity: 0.3;
+  transition:
+    font-size var(--hover-ms, 85ms) ease-in-out,
+    font-weight var(--hover-ms, 85ms) ease-in-out,
+    color var(--hover-ms, 85ms) ease-in-out,
+    text-decoration-color var(--hover-ms, 85ms) ease-in-out,
+    opacity 85ms ease-out;
+}
+.focusing .chapter, .focusing .pager, .focusing .credit { opacity: 0.3; transition: opacity 85ms ease-out; }
+.focusing .hit .v { color: #fffaf0; text-shadow: 0 0 10px var(--gold); }
+
+/* "Back to search results…", tucked under the brand in the top left */
+.backlink {
+  position: absolute;
+  top: calc(100% - 0.5rem);
+  left: clamp(1rem, 4vw, 2.5rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--dim);
+  transition: color 0.15s ease;
+  animation: result-in 300ms ease both;
+}
+.backlink:hover, .backlink:focus-visible { color: var(--gold); }
+.backlink svg { width: 0.9rem; height: 0.9rem; }
+
+/* ---------- verse editor ---------- */
+/* The anchor sits on the clicked point; above the line it's lifted by its own
+   height, so the card grows upward as notes are written. */
+.ve-anchor { position: absolute; z-index: 60; }
+.ve-anchor.above { transform: translateY(-100%); }
+.ve-anchor { transition: opacity 85ms ease; }
+.shift-held .ve-anchor.selecting { opacity: 0.25; pointer-events: none; }
+.shift-held .ve-anchor.selecting * { pointer-events: none; }
+
+/* A white card that rises out of the clicked spot; its tail points at the click. */
+.verse-editor {
+  position: relative;
+  width: 18rem;
+  padding: 1.1rem 1rem 1rem;
+  color: #1a2638;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  opacity: 0;
+}
+.verse-editor.above { transform-origin: var(--tail, 50%) 100%; }
+.verse-editor.below { transform-origin: var(--tail, 50%) 0%; }
+.verse-editor.placed.above { animation: ve-up 180ms cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+.verse-editor.placed.below { animation: ve-down 180ms cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+.verse-editor.closing { animation: ve-out 120ms ease-in both; }
+@keyframes ve-up { from { opacity: 0; transform: translateY(10px) scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes ve-down { from { opacity: 0; transform: translateY(-10px) scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes ve-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.96); } }
+@media (prefers-reduced-motion: reduce) {
+  .verse-editor.placed.above, .verse-editor.placed.below { animation: none; opacity: 1; }
+}
+
+.ve-tail {
+  position: absolute;
+  left: var(--tail, 50%);
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  border-radius: 2px;
+  transform: translateX(-50%) rotate(45deg);
+}
+.verse-editor.above .ve-tail { bottom: -6px; }
+.verse-editor.below .ve-tail { top: -6px; }
+
+.ve-empty { margin: 0; font-size: 0.92rem; color: #5b6576; }
+/* the selected passage (e.g. Matthew 25:24,27,29), when more than one verse */
+.ve-passage { margin: 0 0 0.55rem; font-size: 0.78rem; font-weight: 500; letter-spacing: 0.02em; color: #1a2638; }
+/* on an entry whose verses differ from the selection: which verses it covers */
+.ve-entry-passage { display: block; margin-bottom: 0.1rem; font-size: 0.68rem; color: #8a93a3; letter-spacing: 0.02em; }
+
+/* the (+) button, and a fresh one spawning in below a new editor */
+.ve-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin: 0.8rem auto 0;
+  padding: 0;
+  color: #1a2638;
+  background: #f1f3f6;
+  border: 1px solid #d8dde5;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.ve-list + .ve-add { margin-top: 0.7rem; }
+.ve-add:hover { background: #e6eaf0; border-color: #c4cbd6; }
+.ve-add:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.ve-add svg { width: 1.15rem; height: 1.15rem; }
+.ve-add.spawn { animation: ve-spawn 85ms ease-out both; }
+@keyframes ve-spawn { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
+
+/* The text editor's viewing window. It is born as the (+) button (.as-button:
+   same size, colour, border and radius) and eases into the editor in 85ms. */
+.ve-edit { position: relative; margin: 0.8rem 0 0; }
+.ve-list + .ve-edit { margin-top: 0.7rem; }
+.ve-slot {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 6.2rem;
+  margin: 0 auto;
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #1a2638;
+  background: #f7f8fa;
+  border: 1px solid #d8dde5;
+  border-radius: 12px;
+  overflow: hidden;
+  transition:
+    width 85ms ease-out,
+    min-height 85ms ease-out,
+    padding 85ms ease-out,
+    border-radius 85ms ease-out,
+    background-color 85ms ease-out;
+}
+.ve-slot:focus-within { border-color: #b9c2cf; }
+.ve-slot.as-button {
+  width: 2.4rem;
+  min-height: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  background: #f1f3f6;
+  border-radius: 9px;
+  transition: none;
+}
+.ve-slot.as-button > * { visibility: hidden; }
+.ve-host { flex: 1; }
+.ve-holder { animation: ve-fade 110ms 60ms ease-out both; }
+@keyframes ve-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Editor.js, fitted to the small window: no block toolbox or drag handles, no
+   bottom padding, no centred max width. Inline formatting (bold, italic, link)
+   still appears on selection. */
+.ve-slot .ce-toolbar { display: none !important; }
+.ve-slot .codex-editor__redactor { padding-bottom: 0 !important; margin-right: 0 !important; }
+.ve-slot .ce-block__content, .ve-slot .ce-toolbar__content { max-width: none; margin: 0; }
+.ve-slot .ce-paragraph { padding: 0.25rem 0; line-height: 1.45; }
+/* Editor.js hides its placeholder while the text box has focus; here it should
+   show whenever the note is empty, including right after the editor opens. */
+.ve-slot .codex-editor--empty .ce-paragraph[data-placeholder]:empty::before { color: #8a93a3; opacity: 1 !important; }
+/* its boot time loading block reserves ~270px; not wanted in a small editor */
+.ve-slot .codex-editor__loader { display: none; }
+.ve-slot a { color: #8a6a1f; text-decoration: underline; text-decoration-color: rgba(138, 106, 31, 0.4); text-underline-offset: 2px; }
+/* VerseRefs: inline links to a verse, drawn as blue links (no action yet) */
+.ve-slot a[href^="/?ref="] {
+  color: #1f5fd1;
+  text-decoration: underline;
+  text-decoration-color: rgba(31, 95, 209, 0.35);
+  text-underline-offset: 2px;
+  white-space: nowrap; /* a reference stays in one piece */
+  cursor: pointer;
+}
+.ve-slot a[href^="/?ref="]:hover { text-decoration-color: #1f5fd1; }
+.ve-slot .ce-inline-toolbar { z-index: 3; }
+.ve-slot u { text-decoration: underline; text-underline-offset: 2px; }
+.ve-slot s, .ve-slot strike, .ve-slot del { text-decoration: line-through; }
+
+/* The format status bar along the bottom of the note: B I U S, lit when the text
+   at the cursor has that format; each also turns it on or off. */
+.ve-format {
+  display: flex;
+  gap: 0.15rem;
+  margin: 0.35rem -0.7rem -0.45rem;
+  padding: 0.2rem 0.45rem;
+  background: #eef1f5;
+  border-top: 1px solid #e1e5eb;
+  animation: ve-fade 110ms 60ms ease-out both;
+}
+.ve-fmt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.3rem;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1;
+  color: #9aa2b0;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 85ms ease, background-color 85ms ease;
+}
+.ve-fmt:hover { color: #5b6576; background: #e3e7ed; }
+.ve-fmt:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.ve-fmt.on { color: #1a2638; background: #d9dfe8; }
+.ve-fmt-bold { font-weight: 700; }
+.ve-fmt-italic { font-style: italic; font-family: Georgia, "Times New Roman", serif; font-size: 0.86rem; }
+.ve-fmt-underline { text-decoration: underline; text-underline-offset: 2px; }
+.ve-fmt-strike { text-decoration: line-through; }
+
+/* Save (green check) and discard (red bin), just under the note's bottom right
+   corner, for writing with the mouse. Sits beside the centred (+), not above it. */
+.ve-actions {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  display: flex;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+}
+.ve-save, .ve-discard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 85ms ease, color 85ms ease;
+  animation: ve-spawn 85ms 60ms ease-out both; /* once the note has grown out of the (+) */
+}
+.ve-save svg, .ve-discard svg { width: 1.05rem; height: 1.05rem; }
+.ve-save { color: #2f9e55; }
+.ve-save:hover, .ve-save:focus-visible { color: #237a42; background: #e3f4e8; }
+.ve-discard { color: #d33a3a; }
+.ve-discard:hover, .ve-discard:focus-visible { color: #b02626; background: #fbe6e6; }
+.ve-save:focus-visible, .ve-discard:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.ve-actions { align-items: center; }
+
+/* The note's highlight colour: a small circle beside the check and bin, opening a
+   wheel of the ten highlighter colours around the current one. */
+.ve-color { position: relative; display: flex; }
+.ve-color-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 85ms ease;
+  animation: ve-spawn 85ms 60ms ease-out both;
+}
+.ve-color-btn:hover, .ve-color-btn.on { background: #f1f3f6; }
+.ve-color-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.ve-color-dot {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(26, 38, 56, 0.22);
+  transition: background-color 85ms ease;
+}
+.ve-wheel {
+  position: absolute;
+  z-index: 5;
+  right: -0.6rem;
+  bottom: calc(100% + 0.4rem);
+  width: 7.4rem;
+  height: 7.4rem;
+  background: #ffffff;
+  border: 1px solid #d8dde5;
+  border-radius: 50%;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  transform-origin: calc(100% - 1.4rem) 100%;
+  animation: ve-wheel-in 85ms ease-out both;
+}
+@keyframes ve-wheel-in { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
+/* the current colour, large, in the middle of the ring */
+.ve-wheel-now {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin: -0.95rem 0 0 -0.95rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(26, 38, 56, 0.2);
+  transition: background-color 85ms ease;
+}
+.ve-swatch {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin: -0.65rem 0 0 -0.65rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(26, 38, 56, 0.2);
+  cursor: pointer;
+  transition: box-shadow 85ms ease, filter 85ms ease;
+}
+.ve-swatch:hover { filter: brightness(1.06); box-shadow: inset 0 0 0 1px rgba(26, 38, 56, 0.2), 0 0 0 2px #ffffff, 0 0 0 3.5px #b9c2cf; }
+.ve-swatch.on { box-shadow: inset 0 0 0 1px rgba(26, 38, 56, 0.2), 0 0 0 2px #ffffff, 0 0 0 3.5px #1a2638; }
+.ve-swatch:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .ve-wheel { animation: none; } }
+
+/* VerseLinks, collapsed: the first five words, references in small print below */
+.ve-list { list-style: none; margin: 0; padding: 0; text-align: left; }
+.ve-list li + li { border-top: 1px solid #eceff3; }
+.ve-row { display: flex; align-items: center; gap: 0.15rem; }
+.ve-row .ve-entry { flex: 1; min-width: 0; }
+.ve-entry-refs a {
+  color: #1f5fd1;
+  text-decoration: underline;
+  text-decoration-color: rgba(31, 95, 209, 0.35);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ve-entry-refs a:hover { text-decoration-color: #1f5fd1; }
+.ve-entry:focus-visible, .hl-item:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.ve-entry {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.45rem;
+  font: inherit;
+  text-align: left;
+  color: #1a2638;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.ve-entry:hover, .ve-entry:focus-visible { background: #f1f3f6; }
+/* the note's highlighter colour, as a thin strip down its left edge */
+.ve-entry { position: relative; padding-left: 0.85rem; }
+.ve-entry::before {
+  content: "";
+  position: absolute;
+  left: 0.2rem;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--hl, transparent);
+  opacity: 0.85;
+}
+/* a folded note: as much of its text as fits on two lines (see NotePreview.js) */
+.ve-entry-text { display: block; font-size: 0.92rem; font-weight: 400; line-height: 1.35; overflow: hidden; overflow-wrap: anywhere; }
+.ve-entry-text b, .ve-entry-text strong { font-weight: 700; }
+.ve-entry-text u { text-decoration: underline; text-underline-offset: 2px; }
+.ve-entry-text s, .ve-entry-text strike, .ve-entry-text del { text-decoration: line-through; }
+.ve-entry-refs { display: block; margin-top: 0.15rem; font-size: 0.74rem; color: #1f5fd1; letter-spacing: 0.01em; }
+
+/* collapsed: the same list, tighter */
+.verse-editor.dense { padding: 0.45rem 0.45rem; }
+.verse-editor.dense .ve-entry { padding: 0.4rem 0.45rem; }
+
+/* ---------- search preview (top 3 matches under the bar) ---------- */
+.search { position: relative; }
+.search-preview {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  z-index: 55;
+  min-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.35rem;
+  background: var(--ink-lift);
+  border: 1px solid color-mix(in srgb, var(--dim) 25%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  max-height: min(70vh, 34rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: nav-in 120ms ease-out both;
+}
+.sp-item {
+  display: block;
+  padding: 0.6rem 0.7rem 0.65rem;
+  border-radius: 7px;
+  transition: background-color 0.12s ease;
+}
+.sp-item + .sp-item { margin-top: 0.1rem; }
+.sp-item.on, .sp-item:focus-visible { background: color-mix(in srgb, var(--paper) 8%, transparent); }
+/* the whole verse, as on the results page, so the matching words are always visible */
+.sp-text {
+  display: block;
+  font-family: var(--reader-font);
+  font-size: 1rem;
+  font-weight: 300;
+  line-height: 1.45;
+  color: var(--paper);
+}
+.sp-where { display: block; margin-top: 0.25rem; font-size: 0.75rem; letter-spacing: 0.03em; color: var(--gold); }
+.sp-score { margin-left: 0.6rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+.sp-note { margin: 0; padding: 0.6rem 0.7rem; font-size: 0.82rem; color: var(--dim); }
+.sp-all {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--dim) 18%, transparent);
+  border-radius: 0 0 7px 7px;
+  cursor: pointer;
+}
+.sp-all:hover, .sp-all:focus-visible { color: var(--paper); }
+.sp-live { color: var(--dim); opacity: 0.75; }
+
+/* ---------- inline verse search (Tab while writing a VerseLink) ---------- */
+.ve-inline-search {
+  position: absolute;
+  z-index: 70;
+  width: 19rem;
+  padding: 0.4rem;
+  color: #1a2638;
+  background: #ffffff;
+  border: 1px solid #d8dde5;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  animation: nav-in 85ms ease-out both;
+}
+.ve-inline-search input {
+  width: 100%;
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: #1a2638;
+  background: #f4f6f9;
+  border: 1px solid #d8dde5;
+  border-radius: 7px;
+  outline: none;
+}
+.ve-inline-search input:focus { border-color: #1f5fd1; }
+.ve-inline-search input::placeholder { color: #8a93a3; }
+.ivs-list { max-height: min(50vh, 22rem); overflow-y: auto; overscroll-behavior: contain; margin-top: 0.3rem; }
+.ivs-item {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  text-align: left;
+  color: #1a2638;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ivs-item.on { background: #eef3fc; }
+.ivs-text { display: block; font-size: 0.8rem; line-height: 1.4; }
+.ivs-where { display: block; margin-top: 0.15rem; font-size: 0.7rem; color: #1f5fd1; }
+.ivs-score { margin-left: 0.5rem; color: #8a93a3; font-variant-numeric: tabular-nums; }
+.ivs-note { margin: 0; padding: 0.4rem 0.55rem; font-size: 0.76rem; color: #8a93a3; }
+
+/* ---------- VerseRef hover preview ---------- */
+.vr-preview {
+  position: absolute;
+  z-index: 72;
+  width: 21rem;
+  padding: 0.55rem 0.55rem 0.45rem;
+  color: #1a2638;
+  background: #ffffff;
+  border: 1px solid #d8dde5;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  text-align: left;
+  animation: vr-in 70ms ease-out both; /* with the prefetch, fully shown within ~85ms of hovering */
+}
+@keyframes vr-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.vr-head { margin: 0 0 0.3rem 0.35rem; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.03em; color: #1f5fd1; }
+.vr-verses { max-height: min(40vh, 16rem); overflow-y: auto; overscroll-behavior: contain; }
+.vr-verse {
+  display: block;
+  width: 100%;
+  padding: 0.3rem 0.35rem;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  text-align: left;
+  color: #6b7485;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.vr-verse.focus { color: #1a2638; }
+.vr-verse:hover { background: #eef3fc; color: #1a2638; }
+.vr-verse sup { margin-right: 0.25rem; font-size: 0.65em; color: #1f5fd1; }
+.vr-note { margin: 0.2rem 0.35rem; font-size: 0.78rem; color: #8a93a3; }
+.vr-hint { margin: 0.35rem 0.35rem 0; padding-top: 0.35rem; border-top: 1px solid #eceff3; font-size: 0.68rem; color: #8a93a3; }
+
+/* ---------- help ---------- */
+.help-button {
+  position: fixed;
+  left: clamp(0.8rem, 2vw, 1.4rem);
+  bottom: calc(clamp(0.8rem, 2vw, 1.4rem) + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--ink-lift) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dim) 35%, transparent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.help-button:hover, .help-button:focus-visible { color: var(--paper); border-color: var(--gold); }
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  background: rgba(6, 10, 16, 0.72);
+  backdrop-filter: blur(3px);
+  animation: help-fade 120ms ease-out both;
+}
+@keyframes help-fade { from { opacity: 0; } to { opacity: 1; } }
+.help-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(56rem, 100%);
+  max-height: 100%;
+  color: var(--paper);
+  background: var(--ink-lift);
+  border: 1px solid color-mix(in srgb, var(--dim) 25%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  animation: nav-in 140ms ease-out both;
+}
+.help-top { position: relative; padding: 1.3rem 1.5rem 1rem; border-bottom: 1px solid color-mix(in srgb, var(--dim) 18%, transparent); }
+.help-top h2 { margin: 0; font-size: 1.5rem; font-weight: 300; }
+.help-top p { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--dim); }
+.help-close { position: absolute; top: 1.1rem; right: 1.2rem; padding: 0; background: none; border: 0; cursor: pointer; }
+.help-close:hover .key, .help-close:focus-visible .key { border-color: var(--gold); }
+.help-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 1.5rem 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 0.5rem 2rem;
+}
+.help-body section { min-width: 0; }
+.help-body h3 { margin: 1rem 0 0.5rem; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.help-body dl { margin: 0; }
+.help-row { display: grid; grid-template-columns: 9.5rem 1fr; gap: 0.9rem; align-items: start; padding: 0.4rem 0; }
+.help-row + .help-row { border-top: 1px solid color-mix(in srgb, var(--dim) 12%, transparent); }
+.help-row dt { display: flex; flex-wrap: wrap; align-items: center; min-height: 1.9rem; }
+.help-row dd { margin: 0; padding-top: 0.3rem; font-size: 0.9rem; line-height: 1.45; color: color-mix(in srgb, var(--paper) 88%, transparent); }
+@media (max-width: 520px) { .help-row { grid-template-columns: 1fr; gap: 0.2rem; } .help-body { grid-template-columns: 1fr; } }
+
+.combo { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.combo .plus, .combo .or { font-size: 0.8rem; color: var(--dim); }
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 1.9rem;
+  height: 1.9rem;
+  padding: 0 0.5rem;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--paper);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--paper) 12%, var(--ink-lift)), color-mix(in srgb, var(--paper) 5%, var(--ink-lift)));
+  border: 1px solid color-mix(in srgb, var(--dim) 45%, transparent);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.key .sym { font-size: 0.95rem; line-height: 1; }
+.key.solo .sym { font-size: 1rem; }
+.key .name { font-size: 0.75rem; color: color-mix(in srgb, var(--paper) 80%, transparent); }
+
+/* ---------- verse highlights (one strip per VerseLink, behind the text) ---------- */
+.hl-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; animation: help-fade 500ms ease-out both; }
+/* each verse's strips are flattened first, then made translucent together, so a
+   newer strip covers an older one instead of mixing with it */
+.hl-verse { position: absolute; inset: 0; isolation: isolate; transition: opacity 85ms ease-out; }
+.hl-strip {
+  position: absolute;
+  border-radius: 3px 5px 4px 6px;  /* a little uneven, like a real highlighter */
+  transform-origin: 50% 50%;
+  pointer-events: auto;            /* found by elementsFromPoint for the hover bubble */
+}
+
+.hl-bubble {
+  position: absolute;
+  z-index: 65;
+  width: 17rem;
+  padding: 0.45rem 0.4rem 0.4rem;
+  color: #1a2638;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  text-align: left;
+  animation: vr-in 85ms ease-out both;
+}
+.hl-bubble-head { margin: 0 0 0.25rem 0.45rem; font-size: 0.68rem; letter-spacing: 0.03em; color: #8a93a3; }
+.hl-bubble-list { max-height: min(40vh, 15rem); overflow-y: auto; overscroll-behavior: contain; }
+/* one row per note, its highlighter colour down the left edge */
+.hl-item {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.45rem 0.5rem 0.85rem; /* the same as .ve-entry, so a note looks alike in both */
+  font: inherit;
+  text-align: left;
+  color: #1a2638;
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.hl-item + .hl-item { margin-top: 0.1rem; }
+.hl-item::before {
+  content: "";
+  position: absolute;
+  left: 0.2rem;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--hl);
+  opacity: 0.85;
+}
+.hl-item.on { background: color-mix(in srgb, var(--hl) 16%, #ffffff); } /* the note under the pointer */
+.hl-item:hover { background: #f1f3f6; }
+.hl-bubble-hint { margin: 0.3rem 0.45rem 0; font-size: 0.66rem; color: #8a93a3; }
+
+/* ---------- deleting a VerseLink: bin → "Are you sure?" ✓ ✗ ---------- */
+.ve-trash, .ve-yes, .ve-no {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  color: #8a93a3;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.ve-trash svg, .ve-yes svg, .ve-no svg { width: 1rem; height: 1rem; }
+.ve-trash:hover, .ve-trash:focus-visible { color: #1a2638; background: #f1f3f6; }
+.ve-yes:hover, .ve-no:hover, .ve-yes:focus-visible, .ve-no:focus-visible { color: #1a2638; background: #eceff3; }
+.ve-confirm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  transform-origin: 100% 50%;
+  animation: ve-ask 85ms ease-out both;  /* the bin opening out into the question */
+}
+@keyframes ve-ask { from { opacity: 0; transform: scaleX(0.35); } to { opacity: 1; transform: none; } }
+.ve-sure { margin-right: 0.25rem; font-size: 0.72rem; font-weight: 500; color: #d33a3a; white-space: nowrap; }
+
+/* ---------- reference helper (typing "Jn 1:14" in a note) ---------- */
+.ref-assist {
+  position: absolute;
+  z-index: 71;
+  width: 19rem;
+  padding: 0.45rem 0.4rem 0.35rem;
+  color: #1a2638;
+  background: #ffffff;
+  border: 1px solid #d8dde5;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  text-align: left;
+  animation: vr-in 85ms ease-out both;
+}
+.ra-head { margin: 0 0 0.3rem 0.4rem; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; color: #1f5fd1; }
+.ra-note { margin: 0.2rem 0.4rem; font-size: 0.76rem; color: #8a93a3; }
+.ra-list { max-height: min(42vh, 17rem); overflow-y: auto; overscroll-behavior: contain; }
+.ra-chapters { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.3rem, 1fr)); gap: 0.2rem; padding: 0 0.1rem; }
+.ra-item {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.45rem;
+  font: inherit;
+  text-align: left;
+  color: #1a2638;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ra-chapters .ra-item { text-align: center; background: #f4f6f9; font-variant-numeric: tabular-nums; }
+.ra-item.on, .ra-chapters .ra-item.on { background: #e3ecfb; }
+.ra-ch { font-size: 0.82rem; }
+.ra-text { display: block; font-size: 0.8rem; line-height: 1.4; }
+.ra-text sup { margin-right: 0.2rem; font-size: 0.65em; color: #1f5fd1; }
+.ra-where { display: block; margin-top: 0.1rem; font-size: 0.68rem; color: #8a93a3; }
+.ra-hint { margin: 0.35rem 0.4rem 0; padding-top: 0.3rem; border-top: 1px solid #eceff3; font-size: 0.66rem; color: #8a93a3; }
